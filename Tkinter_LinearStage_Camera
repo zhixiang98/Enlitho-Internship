@@ -1,15 +1,35 @@
-from pipython import GCSDevice,pitools
+from pipython import GCSDevice, GCSError, gcserror
+import pipython.pitools as pi
+
 import tkinter as tk
 import cv2
 import PIL.Image,PIL.ImageTk
+import threading
+
+class Camera:
+    def __init__(self):
+        self.cap = cv2.VideoCapture(0)
+        self.width = 640
+        self.height = 480
+        self.cap.set(3, self.width)
+        self.cap.set(4, self.height)
+        self.recticlecb = False
+
+    def show_original(self):
+        success, img =  self.cap.read()
+        if self.recticlecb == True:
+            img = cv2.line(img,(int(self.width/2),0),(int(self.width/2),int(self.height)),(0,0,255),1)
+            img = cv2.line(img,(0,int(self.height/2)),(int(self.width), int(self.height/2)),(0,0,255),1)
+        return img
+
 
 
 class LinearStage:
-    def __init__(self,axis):
+    def __init__(self,axis, id_serial):
         self.axis = axis
         self.pi_device = GCSDevice()
-        self.pi_device.ConnectUSB('117020435')
-        self.pi_device.EAX(self.axis, 1)
+        self.pi_device.ConnectUSB(id_serial)             #'117020435'
+        self.pi_device.EAX(self.axis, 1)                   #'117031466'
         self.pi_device.SVO(self.axis,1)
 
     def getVel(self):
@@ -21,9 +41,20 @@ class LinearStage:
     def setVel (self,vel):
         self.pi_device.VEL(self.axis, vel )
 
+    def waitonTarget(self):
+        pi.waitontarget(self.pi_device)
+
+    def InitialiseStage(self):
+        self.pi_device.MOV(self.axis, 65)
+        pi.waitontarget(self.pi_device)
+        self.pi_device.MOV(self.axis,-65)
+        pi.waitontarget(self.pi_device)
+        self.pi_device.MOV(self.axis,0)
+
 
     def movPos(self,pos):
         self.pi_device.MOV(self.axis,pos)
+
 
     def getPos(self):
         return self.pi_device.qPOS(self.axis)
@@ -36,14 +67,41 @@ class LinearStage:
     def checkTarget(self):
         print(self.pi_device.qONT(self.axis))
 
+    def checkPosChange(self):
+        return self.pi_device.HasPosChanged(self.axis)
 
 
-class App(tk.Tk, LinearStage):
+    # def movNegLim(self):
+    #     self.pi_device.MNL(self.axis)
+
+    # def movPosLim(self):
+    #     self.pi_device.MPL(self.axis)
+
+
+    # def defHomePos(self):
+    #     self.pi_device.DFH(self.axis)
+
+    # def movHomePos(self):
+    #     self.pi_device.GOH(self.axis)
+
+
+class App(tk.Tk, LinearStage,Camera):
     def __init__(self,*args,**kwargs):
         tk.Tk.__init__(self, *args,**kwargs)
-        self.x = LinearStage(1)
-        self.connect = False
-        self.geometry("500x250")
+        Camera.__init__(self)
+        try:
+            self.x = LinearStage(1, '117020435')
+        except GCSError as exc:
+            if exc == gcserror.COM_INVALID_ID__9:
+                self.x = None
+                print('LinearStage X not connected!')
+        try:
+            self.y = LinearStage(1,'117031466')
+        except GCSError as exc:
+            if exc == gcserror.COM_INVALID_ID__9:
+                self.y = None
+                print('LinearStage Y not connected!')
+        self.geometry("640x1000")
         container = tk.Frame(self)
         container.grid()
 
@@ -60,6 +118,7 @@ class App(tk.Tk, LinearStage):
 
         self.mymenu = tk.Menu(self)
         self.config(menu=self.mymenu)
+
         Main = tk.Menu(self.mymenu)
         WaffleSettings =tk.Menu(self.mymenu)
         self.mymenu.add_cascade(label = "LinearStage", menu = Main)
@@ -79,64 +138,113 @@ class App(tk.Tk, LinearStage):
 
 class Overview(tk.Frame):
     def __init__ (self, parent, cont):
+        tk.Frame.__init__(self,parent)
         end_column = 10
-        begin_column = 1
-        center_column = (end_column - begin_column)//2
+        begin_column = 0
 
-
-        self.cont =cont
-        self.delay = 100
+        self.cont = cont
+        self.delay = 50
 
 
         tk.Frame.__init__(self,parent)
-        # OVERVIEW LABEL #
-        self.Overviewlabel = tk.Label (self, text = "Overview")
-        self.Overviewlabel.grid(row = 1, column = center_column, padx = 10, pady = 10, sticky = "nsew")
 
         ##Current Position##
-        self.labelbox = tk.LabelFrame(self, text = "Current Position",padx = 10, pady = 10)
-        self.labelbox.grid(row = 2, column =begin_column)
-        self.xposlabel = tk.Label(self.labelbox,text = "X Pos: ").grid(row = 1, column = 0)
-        self.yposlabel = tk.Label(self.labelbox, text = "Y Pos: ").grid(row = 3, column = 0)
+        self.labelbox = tk.LabelFrame(self, text="Current Position", padx=10, pady=10)
+        self.labelbox.grid(row=2, column=begin_column, sticky="NSEW")
+        self.xposlabel = tk.Label(self.labelbox, text="X Pos: ").grid(row=1, column=0)
+        self.yposlabel = tk.Label(self.labelbox, text="Y Pos: ").grid(row=3, column=0)
 
         self.xposvar = tk.StringVar()
         self.yposvar = tk.StringVar()
 
-        self.X_POS = tk.Label(self.labelbox,textvariable = self.xposvar, bg = "light blue").grid(row = 1, column = 1)
-        self.Y_POS = tk.Label(self.labelbox,textvariable = self.yposvar, bg = "light blue").grid(row = 3, column = 1)
+        self.X_POS = tk.Label(self.labelbox, textvariable=self.xposvar, bg="light blue").grid(row=1, column=1)
+        self.Y_POS = tk.Label(self.labelbox, textvariable=self.yposvar, bg="light blue").grid(row=3, column=1)
 
-######### Velocity
+        # create initialisation button
+        self.Initialisation_button = tk.Button(self.labelbox, text="Initialisation", width=10, command=lambda:threading.Thread(target = self.Initialise_stage).start())
+        self.Initialisation_button.grid(row=4, column=0)
+
+        # Current image
+        self.canvas = tk.Canvas(self, height=480, width=640, bd=None, bg='Red')
+        self.canvas.grid(row=1, column=0, columnspan=end_column)
+        self.recticleCBVar = tk.BooleanVar()
+        self.recticleCB = tk.Checkbutton(self, text="Recticle", variable=self.recticleCBVar,
+                                         command=lambda: self.changerecCB()).grid(row=2, column=4)
+
+        ######### Velocity
         ## Current Velocity
         self.currentvel = tk.StringVar()
-        self.SetVelVar = tk.DoubleVar()
+        self.SetSlowVelVar = tk.DoubleVar()
+        self.SetMediumVelVar = tk.DoubleVar()
+        self.SetFastVelVar = tk.DoubleVar()
 
         self.labelbox0 = tk.LabelFrame(self, text=" Velocity", padx=10, pady=10)
-        self.labelbox0.grid(row=3, column=begin_column)
-        self.current_vel_label = tk.Label(self.labelbox0, textvariable =self.currentvel,bg = "light blue").grid(row=1, column=1,sticky = 'NW')
-        self.current_vel_label1 = tk.Label(self.labelbox0, text = "Current Velocity: ").grid(row = 1,column = 0)
+        self.labelbox0.grid(row=3, column=begin_column, sticky="NSEW")
+        self.current_vel_label = tk.Label(self.labelbox0, textvariable=self.currentvel, bg="light blue").grid(row=1,
+                                                                                                              column=1,
+                                                                                                              sticky='NW')
+        self.current_vel_label1 = tk.Label(self.labelbox0, text="Current Velocity: ").grid(row=1, column=0)
 
-        ## Ser Velocity
-        self.setVelLabel = tk.Label(self.labelbox0,text = "Set Velocity: ").grid(row = 2, column = 0)
-        self.setVelEntryBox = tk.Entry(self.labelbox0, width = 5, textvariable = self.SetVelVar).grid(row = 2,column =1)
-        self.setVelButton = tk.Button(self.labelbox0, text = "Confirm", command = lambda:self.set_Vel()).grid(row = 3,column = 0, columnspan = 2)
+        ## Set Velocity
+        self.setSlowVelLabel = tk.Label(self.labelbox0, text="Set Slow Velocity(mm/s): ").grid(row=2, column=0,
+                                                                                               sticky="W")
+        self.setSlowVelEntryBox = tk.Entry(self.labelbox0, width=5, textvariable=self.SetSlowVelVar).grid(row=2,
+                                                                                                          column=1)
+        self.setSlowVelButton = tk.Button(self.labelbox0, text="Confirm", command=lambda: self.set_Vel('SLOW')).grid(row=3,
+                                                                                                               column=0,
+                                                                                                               columnspan=2)
+
+        self.setMediumVelLabel = tk.Label(self.labelbox0, text="Set Normal Velocity(mm/s): ").grid(row=4, column=0,
+                                                                                                   sticky="W")
+        self.setMediumVelEntryBox = tk.Entry(self.labelbox0, width=5, textvariable=self.SetMediumVelVar).grid(row=4,
+                                                                                                              column=1)
+        self.setMediumVelButton = tk.Button(self.labelbox0, text="Confirm", command=lambda: self.set_Vel('MEDIUM')).grid(row=5,
+                                                                                                                 column=0,
+                                                                                                                 columnspan=2)
+
+        self.setFastVelLabel = tk.Label(self.labelbox0, text="Set Fast Velocity(mm/s): ").grid(row=6, column=0,
+                                                                                               sticky="W")
+        self.setFastVelEntryBox = tk.Entry(self.labelbox0, width=5, textvariable=self.SetFastVelVar).grid(row=6,
+                                                                                                         column=1)
+        self.setFastVelButton = tk.Button(self.labelbox0, text="Confirm", command=lambda: self.set_Vel('FAST')).grid(row=7,
+                                                                                                               column=0,
+                                                                                                               columnspan=2)
+
+        ## Arrow Movement configuration
+        self.uparrow = PIL.ImageTk.PhotoImage(file=r"Arrow/arrow_up.png")
+        self.downarrow = PIL.ImageTk.PhotoImage(file=r"Arrow/arrow_down.png")
+        self.leftarrow = PIL.ImageTk.PhotoImage(file=r"Arrow/arrow_left.png")
+        self.rightarrow = PIL.ImageTk.PhotoImage(file=r"Arrow/arrow_right.png")
+
+        self.ArrowMovementFrame = tk.LabelFrame(self, text="Arrow Move", padx=10, pady=10)
+        self.ArrowMovementFrame.grid(row=3, column=2, columnspan=4, sticky="NSEW")
+        self.uparrowbutton = tk.Button(self.ArrowMovementFrame, width=50, height=50, image=self.uparrow, command = lambda:self.move_arrow_stage('UP')).grid(row=0, column=1)
+        self.downarrowbutton = tk.Button(self.ArrowMovementFrame, width=50, height=50, image=self.downarrow, command = lambda:self.move_arrow_stage('DOWN')).grid(row=2,
+                                                                                                                  column=1)
+        self.leftarrowbutton = tk.Button(self.ArrowMovementFrame, width=50, height=50, image=self.leftarrow, command = lambda:self.move_arrow_stage('LEFT')).grid(row=1,
+                                                                                                                  column=0)
+        self.rightarrowbutton = tk.Button(self.ArrowMovementFrame, width=50, height=50, image=self.rightarrow, command = lambda:self.move_arrow_stage('RIGHT')).grid(
+            row=1, column=3)
+
 
 
         ##Move to Abs Position##
-        self.labelbox1 = tk.LabelFrame(self, text ="Move to Absolute Position",padx = 10, pady = 10)
-        self.labelbox1.grid(row = 2, column = 4)
-        self.moveabsposxlabel = tk.Label(self.labelbox1, text = "X Pos: ").grid(row =1, column =0)
-        self.moveabsposylabel = tk.Label(self.labelbox1, text = "Y Pos: ").grid(row =3, column =0)
+        self.labelbox1 = tk.LabelFrame(self, text="Move to Absolute Position", padx=10, pady=10)
+        self.labelbox1.grid(row=2, column=2, sticky="NW")
+        self.moveabsposxlabel = tk.Label(self.labelbox1, text="X Pos: ").grid(row=1, column=0)
+        self.moveabsposylabel = tk.Label(self.labelbox1, text="Y Pos: ").grid(row=3, column=0)
 
         self.move_abs_posx_var = tk.DoubleVar()
         self.move_abs_posy_var = tk.DoubleVar()
 
-        self.moveabsposx = tk.Entry(self.labelbox1, width = 10, textvariable = self.move_abs_posx_var ).grid(row = 1,column = 1)
-        self.moveabsposy = tk.Entry(self.labelbox1, width  = 10, textvariable = self.move_abs_posy_var).grid(row = 3, column = 1)
-        self.movebutton = tk.Button (self.labelbox1, width = 10, text = "Confirm", command = lambda: self.set_abs_posx()).grid(row = 4, column = 1)
+        self.moveabsposx = tk.Entry(self.labelbox1, width=10, textvariable=self.move_abs_posx_var).grid(row=1, column=1)
+        self.moveabsposy = tk.Entry(self.labelbox1, width=10, textvariable=self.move_abs_posy_var).grid(row=3, column=1)
+        self.movebutton = tk.Button(self.labelbox1, width=10, text="Confirm", command=lambda: self.set_abs_posx()).grid(
+            row=4, column=1)
 
         ##Move to Rel Position##
         self.labelbox2 = tk.LabelFrame(self, text="Move to Relative Position", padx=10, pady=10)
-        self.labelbox2.grid(row=2, column=6)
+        self.labelbox2.grid(row=2, column=3)
         self.moverelposxlabel = tk.Label(self.labelbox2, text="X Pos: ").grid(row=1, column=0)
         self.moverelposylabel = tk.Label(self.labelbox2, text="Y Pos: ").grid(row=3, column=0)
 
@@ -145,55 +253,136 @@ class Overview(tk.Frame):
 
         self.moverelposx = tk.Entry(self.labelbox2, width=10, textvariable=self.move_rel_posx_var).grid(row=1, column=1)
         self.moverelposy = tk.Entry(self.labelbox2, width=10, textvariable=self.move_rel_posy_var).grid(row=3, column=1)
-        self.movebutton1 = tk.Button(self.labelbox2, width=10, text="Confirm", command=lambda: self.set_rel_posx()).grid(
-            row=4, column=1)
+        self.movebutton1 = tk.Button(self.labelbox2, width=10, text="Confirm", command=lambda: self.set_rel_posx()).grid(row=4, column=1)
 
 
+        self.update_canvas()
+
+    def changerecCB(self):
+        self.cont.recticlecb = self.recticleCBVar.get()
+
+    def update_canvas(self):
+
+        self.cur_vel()
+
+        #---------get info from LinearStage
+        try:
+            self.set_xposvar()
+        except:
+            pass
+
+        try:
+            self.set_yposvar()
+        except:
+            pass
+
+        #---------------Canvas update---------
+        try:
+            self.img = self.cont.show_original()
+            self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
+            self.img = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(self.img))
+            self.canvas.create_image(2, 2, image=self.img, anchor=tk.NW)
+        except:
+            pass
+
+        self.after(self.delay, self.update_canvas)
 
 
-        self.update()
-
-
-
+    #--------------------- LINEAR STAGE COMMAND-----------------
     def cur_vel(self):
-        vel = self.cont.x.getVel()
+        vel = self.cont.y.getVel()
         flt= (vel.get(1))
         self.currentvel.set(str(flt))
 
     def set_rel_posx(self):
-        pos =self.move_rel_posx_var.get()
-        rounded = round(pos)
-        if rounded >= -65 and rounded <= 65:
-            self.cont.x.movRel(pos)
-        else:
-            pass
+        pos_x = self.move_rel_posx_var.get()
+        pos_y = self.move_rel_posy_var.get()
+        try:
+            self.cont.x.movRel(pos_x)
+        except:
+            print("x-stage not moving")
 
+        try:
+            self.cont.y.movRel(pos_y)
+        except:
+            print("y-stage not moving!")
 
     def set_abs_posx(self):
-        pos =self.move_abs_posx_var.get()
-        rounded = round(pos)
-        if rounded >= -65 and rounded <= 65:
-            self.cont.x.movPos(pos)
-        else:
-            pass
+        # posx =self.move_abs_posx_var.get()
+        # rounded = round(posx)
+        # if rounded >= -65 and rounded <= 65:
+        #     self.cont.x.movPos(pos)
+        # else:
+        #     pass
+        pos_x = self.move_abs_posx_var.get()
+        pos_y = self.move_abs_posy_var.get()
+
+        try:
+            self.cont.x.movPos(pos_x)
+        except GCSError as exc:
+            if exc == gcserror.E7_PI_CNTR_POS_OUT_OF_LIMITS:
+                print("x-stage not moved! Out of limits!")
+
+        try:
+            self.cont.y.movPos(pos_y)
+        except GCSError as exc:
+            if exc == gcserror.E7_PI_CNTR_POS_OUT_OF_LIMITS:
+                print("y-stage not moved! Out of limits!")
 
     def set_xposvar (self):
         val = self.cont.x.getPos()
         flt = (val.get(1))
         self.xposvar.set(str(flt))
 
-    def set_Vel (self):
-        val = self.SetVelVar.get()
-        self.cont.x.setVel(val)
+    def set_yposvar(self):
+        val = self.cont.y.getPos()
+        flt = (val.get(1))
+        self.yposvar.set(str(flt))
 
+    def set_Vel (self,speed):
+        if speed == "FAST":
+            val = self.SetFastVelVar.get()
+        elif speed =="MEDIUM":
+            val = self.SetMediumVelVar.get()
+        elif speed =="SLOW":
+            val = self.SetSlowVelVar.get()
+        try:
+            self.cont.y.setVel(val)
+        except GCSError as exc:
+            if exc == gcserror.PI_CNTR_VEL_OUT_OF_LIMITS:
+                print("Velocity out of Limit!")
+        try:
+            self.cont.x.setVel(val)
+        except:
+            if exc == gcserror.PI_CNTR_VEL_OUT_OF_LIMITS:
+                print("Velocity out of Limit!")
 
+    def Initialise_stage(self):
+        try:
+            self.cont.x.InitialiseStage()
+            print("x-stage finish initialising")
+        except:
+            print("x-stage not initialised!")
+        try:
+            self.cont.y.InitialiseStage()
+            print("y-stage finish initialising")
+        except:
+            print("y-stage not initialised!")
 
+    def move_arrow_stage(self,direction):
+        if direction == 'UP':
+            val = float(self.currentvel.get())* 1
+            self.cont.y.movRel(val)
+        if direction == 'DOWN':
+            val = -1 * float(self.currentvel.get())
+            self.cont.y.movRel(val)
+        if direction == 'LEFT':
+            val = float(self.currentvel.get())* -1
+            self.cont.x.moveRel()
+        if direction == 'RIGHT':
+            val = float(self.currentvel.get())* 1
+            self.cont.x.moveRel(val)
 
-
-    def update(self):
-        self.set_xposvar()
-        self.cur_vel()
-        self.after(self.delay, self.update)
 
 class Parameters(tk.Frame):
     def __init__ (self, parent, cont):
