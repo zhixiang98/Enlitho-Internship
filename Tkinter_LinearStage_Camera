@@ -290,10 +290,14 @@ class Overview(tk.Frame):
 
     #--------------------- LINEAR STAGE COMMAND-----------------
     def cur_vel(self):
-        vel = self.cont.y.getVel()
-        flt= (vel.get(1))
-        self.currentvel.set(str(flt))
+        try:
+            vel = self.cont.y.getVel()
+            flt= (vel.get(1))
+            self.currentvel.set(str(flt))
+        except:
+            print("Current Velocity not available!")
 
+            
     def set_rel_posx(self):
         pos_x = self.move_rel_posx_var.get()
         pos_y = self.move_rel_posy_var.get()
