@@ -1,14 +1,12 @@
 from pipython import GCSDevice,pitools
 import tkinter as tk
 import cv2
+from tkinter import ttk
 import PIL.Image,PIL.ImageTk
-import matplotlib
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
-import matplotlib.animation as animation
 import threading
-
+from tkinter import filedialog
+import pandas as pd
+import time
 
 
 class LinearStage:
@@ -37,7 +35,7 @@ class App(tk.Tk, Camera, LinearStage):
         Camera.__init__(self)
         self.x = LinearStage(1)
         self.connect = False
-        self.geometry("1000x1000")
+        self.geometry("1050x1000")
         container = tk.Frame(self)
         container.grid()
 
@@ -81,7 +79,6 @@ class Overview(tk.Frame):
         self.delay = 80
 
 
-        tk.Frame.__init__(self,parent)
 
         ##Current Position##
         self.labelbox = tk.LabelFrame(self, text = "Current Position",padx = 10, pady = 10)
@@ -179,80 +176,215 @@ class Overview(tk.Frame):
         self.eventx = 0
         self.eventy = 0
 
-        #empty label frame
+
+
+        #positionpad label frame
         self.labelframepositionpad = tk.LabelFrame(self,text = "Position Pad")
         self.labelframepositionpad.grid(row = 1, column = 11, sticky = "NSEW")
 
-        self.fig = Figure(figsize=(5,5),dpi = 80)
-        self.coordinates  = self.fig.add_subplot(111)
+        self.CanvasPositionPad = tk.Canvas(self.labelframepositionpad, height = 400, width = 400, bd = None, bg = 'blue')
+        self.CanvasPositionPad.grid(row = 0, column = 0,columnspan =4)
 
-        self.coordinates.set_xlim(-65,65)
-        self.coordinates.set_ylim(-65,65)
-
-        # Change major ticks to show every 10.
-        self.coordinates.xaxis.set_major_locator(MultipleLocator(10))
-        self.coordinates.yaxis.set_major_locator(MultipleLocator(10))
-
-        # Change minor ticks to show every 2.
-        self.coordinates.xaxis.set_minor_locator(AutoMinorLocator(2))
-        self.coordinates.yaxis.set_minor_locator(AutoMinorLocator(2))
-
-        self.coordinates.grid(which = 'major', color = '#CCCCCC', linestyle='--')
-        self.coordinates.grid(which = 'minor', color = '#CCCCCC', linestyle = ':')
+        self.CanvasPositionPad.bind("<Button-1>", self.onclick)
+        #target location
+        self.targetxvar = tk.StringVar()
+        self.targetyvar = tk.StringVar()
+        self.targetxlabel = tk.Label(self.labelframepositionpad, text = "Target X Pos: ").grid(row = 1, column =0)
+        self.targetylabel = tk.Label(self.labelframepositionpad, text = "Target Y Pos: ").grid(row = 1, column =2)
+        self.targetxval = tk.Label(self.labelframepositionpad, textvariable = self.targetxvar, bg = "light blue").grid(row = 1, column = 1)
+        self.targetyval = tk.Label(self.labelframepositionpad, textvariable = self.targetyvar, bg = "light blue").grid(row = 1, column = 3)
 
 
+        #Treeview
+        self.treeviewframe = tk.LabelFrame (self,text = "Treeview", padx = 10, pady= 10)
+        self.treeviewframe.grid(row = 2, column = 11, rowspan = 10)
+        self.treeview = ttk.Treeview(self.treeviewframe)
+        self.treeview['columns'] = ("Command","x_value","y_value","step")
+        self.treeview.column("#0", width=0, stretch="NO")
+        self.treeview.column("Command", anchor="w", width=120)
+        self.treeview.column("x_value", anchor="center", width=80)
+        self.treeview.column("y_value", anchor="center", width=80)
+        self.treeview.column("step", anchor="center", width=80)
 
-        self.canvascoordinate = FigureCanvasTkAgg(self.fig,self.labelframepositionpad)
-        self.canvascoordinate.get_tk_widget().pack()
+        self.treeview.heading("#0", text="", anchor="w")
+        self.treeview.heading("Command", text="Command", anchor="w")
+        self.treeview.heading("x_value", text="x_value", anchor="w")
+        self.treeview.heading("y_value", text="y_value", anchor="w")
+        self.treeview.heading("step", text="Step", anchor="center")
 
-        self.fig.canvas.callbacks.connect('button_press_event', self.onclick)
+        #tree binding
+        # self.treeview.bind("<ButtonRelease-1>", self.clickertree)
 
-        toolbar = NavigationToolbar2Tk(self.canvascoordinate,self.labelframepositionpad)
-        toolbar.update()
-
-
+        self.treeview.grid(row = 0, column  = 0, columnspan = 4)
 
 
+            #New Data entry
+        self.entrybutton = tk.Button(self.treeviewframe, text = "Insert" ,width = 10, command = lambda:self.newentry())
+        self.entrybutton.grid(row = 4, column = 0, pady = 5)
 
+            #Remove entry
+        self.removentrybutton = tk.Button(self.treeviewframe, text="Remove",width = 10, command=lambda: self.removentry())
+        self.removentrybutton.grid(row=4, column=1)
 
-#Update canvas
+            #moveup entry
+        self.moveupentrybutton = tk.Button(self.treeviewframe, text = "Move Up",width = 10, command = lambda: self.moveuptree())
+        self.moveupentrybutton.grid(row = 4, column =2)
+
+            #movedown entry
+        self.movedownbutton = tk.Button(self.treeviewframe, text = "Move Down",width = 10,  command = lambda: self.movedowntree())
+        self.movedownbutton.grid(row = 4, column =3)
+
+            # Import Excel file
+        self.filebutton = tk.Button(self.treeviewframe, text  = "Import",width = 10, command = lambda:self.fileopen())
+        self.filebutton.grid (row = 5, column  = 0)
+            #Clear all in treeview
+        self.clearallbutton = tk.Button(self.treeviewframe, text = "Clear All",width = 10, command = lambda:self.clearall())
+        self.clearallbutton.grid(row = 5, column = 1)
+            # Execute
+        self.executetree = tk.Button(self.treeviewframe,  text = "Execute", width = 24, command = lambda:self.executiontree())
+        self.executetree.grid(row = 5, column =2, columnspan = 2)
+
+            # Input new data field
+        self.commandlabel = tk.Label(self.treeviewframe,text = "Command")
+        self.commandlabel.grid(row = 1, column = 0)
+
+        self.treexlabel = tk.Label(self.treeviewframe, text = "x-value")
+        self.treexlabel.grid(row = 1, column = 1)
+
+        self.treeylabel = tk.Label(self.treeviewframe, text = "y-label")
+        self.treeylabel.grid(row = 1, column  = 2)
+
+        self.step = tk.Label(self.treeviewframe, text = "Step")
+        self.step.grid(row =1 , column = 3)
+
+        self.commandentry = tk.Entry(self.treeviewframe, width = 15)
+        self.commandentry.grid(row = 2,column = 0)
+
+        self.treexentryx = tk.Entry(self.treeviewframe, width = 15)
+        self.treexentryx.grid(row = 2, column =1)
+
+        self.treeyentry = tk.Entry(self.treeviewframe, width = 15)
+        self.treeyentry.grid(row=2, column=2)
+
+        self.stepentry = tk.Entry(self.treeviewframe, width = 15)
+        self.stepentry.grid(row=2, column=3)
+
+        #Update canvas
         self.update_canvas()
-
-    def updatecoordinateplot(self):
-
-        self.coordinates.clear()
-        self.coordinates = self.fig.add_subplot(111)
-        self.coordinates.plot(self.eventx, self.eventy, 'bo', markersize=5)
+        self.update_positionpad()
 
 
-        self.coordinates.set_xlim(-65, 65)
-        self.coordinates.set_ylim(-65, 65)
+    def moveuptree(self):
+        rows = self.treeview.selection()
+        for row in rows:
+            self.treeview.move(row,self.treeview.parent(row), self.treeview.index(row)-1 )
 
-        # Change major ticks to show every 10.
-        self.coordinates.xaxis.set_major_locator(MultipleLocator(10))
-        self.coordinates.yaxis.set_major_locator(MultipleLocator(10))
+    def movedowntree(self):
+        rows = self.treeview.selection()
+        for row in reversed(rows):
+            self.treeview.move(row, self.treeview.parent(row),self.treeview.index(row)+1)
 
-        # Change minor ticks to show every 2.
-        self.coordinates.xaxis.set_minor_locator(AutoMinorLocator(2))
-        self.coordinates.yaxis.set_minor_locator(AutoMinorLocator(2))
+    def removentry(self):
+        rows = self.treeview.selection()
+        print(rows)
+        for row in rows:
+            self.treeview.delete(row)
 
-        self.coordinates.grid(which='major', color='#CCCCCC', linestyle='--')
-        self.coordinates.grid(which='minor', color='#CCCCCC', linestyle=':')
+    # Open file function
+    def fileopen(self):
+        filename  = filedialog.askopenfilename(initialdir = "C:/documents", title = "Open file", filetype = (("xlsx files", "*.xlsx"),("All Files","*.*")))
+        if filename:
+            try:
+                file = r"{}".format(filename)
+                df = pd.read_excel(file)
+                df = df.fillna("")
+                df_rows = df.to_numpy().tolist()
+            except ValueError:
+                print("File could not be read")
+            except FileNotFoundError:
+                print("File could not be found")
+        for row in df_rows:
+            self.treeview.insert("","end", values = row)
+    #clear all from treeview
+    def clearall(self):
+        self.treeview.delete(*self.treeview.get_children())
 
-        self.canvascoordinate.draw()
+    #add entry
+    def newentry(self):
+        if self.commandentry.get() == '' and self.treexentryx.get() =='' and self.treeyentry.get()=='' and self.stepentry.get()=='':
+            print('nothing!')
+            pass
+        else:
+            self.treeview.insert('', 'end', values=(self.commandentry.get(), self.treexentryx.get(), self.treeyentry.get(), self.stepentry.get()))
+            self.commandentry.delete(0,'end')
+            self.treexentryx.delete(0, 'end')
+            self.treeyentry.delete(0,'end')
+            self.stepentry.delete(0,'end')
 
 
+    def executiontree(self):
+        # print("selection: ")
+        # for items in self.treeview.selection():
+        #     item_text = self.treeview.item(items)
+        #     print(item_text)
+        #     itemlst = item_text.get('values')
+        #     print(type(itemlst[2]))
+        #     print(float(itemlst[2]))
+        self.executelist = []
+        for items in self.treeview.get_children():
+            item_text = self.treeview.item(items)
+            item_text = item_text.get('values')
+            self.executelist.append(item_text)
+
+        command = threading.Thread(target = self.executionfunction, args= (self.executelist,))
+        command.start()
+        # print(self.executelist)
+
+
+    def executionfunction(self, instructions):
+        for commands in instructions:
+            if commands[0] == "Move":
+                print("Moving" + str(commands[1]) +'xpos' + str(commands[2]) +'ypos')
+                time.sleep(3)
+                print("slept 3 seconds")
+            elif commands[0] == "MoveRelative":
+                print("Moving to relative" + str(commands[1]) + 'x pos' + str(commands[2]) + 'y pos')
+            elif commands[0]== "Step":
+                print("Stepping")
+
+
+    # Position Pad clicker
     def onclick(self,event):
-        self.eventx = event.xdata
-        self.eventy = event.ydata
-        print(event.xdata,event.ydata)
+        if self.CanvasPositionPad.canvasx(event.x) <50 or self.CanvasPositionPad.canvasy(event.y) <48 or self.CanvasPositionPad.canvasx(event.x) >360 or self.CanvasPositionPad.canvasy(event.y)>356:
+            print("Out of coordinate frame!")
+        else:
+
+            self.eventx = self.CanvasPositionPad.canvasx(event.x)
+            self.eventy = self.CanvasPositionPad.canvasy(event.y)
+            self.pospadx = self.convert_canvas_coord_to_pospad(self.eventx,1)
+            self.pospady = self.convert_canvas_coord_to_pospad(self.eventy,2)
+            self.targetxvar.set(str(self.pospadx))
+            self.targetyvar.set(str(self.pospady))
+
+
+    def convert_canvas_coord_to_pospad(self,numbers,xy):
+        if xy == 1:
+            scale = 130/310
+            magnitude = (numbers - 50)*scale # +2 to the limit
+            magnitude = magnitude - 65
+
+
+        if xy == 2:
+            scale = 130/308
+            magnitude = (numbers - 48)*scale
+            magnitude = 65 - magnitude
+        return magnitude
 
 
     def changerecCB(self):
         self.cont.recticlecb = self.recticleCBVar.get()
 
     def update_canvas(self):
-        self.updatecoordinateplot
         try:
             self.img = self.cont.show_original()
             self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
@@ -260,11 +392,16 @@ class Overview(tk.Frame):
             self.canvas.create_image(2, 2, image=self.img, anchor=tk.NW)
         except:
             pass
-
-
-
         self.after(self.delay, self.update_canvas)
 
+
+    def update_positionpad(self):
+
+        self.positionpadimg = cv2.imread('PositionPad.png')
+        self.positionpadimg = cv2.circle(self.positionpadimg,(int(self.eventx),int(self.eventy)),3,(255,0,0),1)
+        self.positionpadimg= PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(self.positionpadimg))
+        self.CanvasPositionPad.create_image(2,2,image = self.positionpadimg,anchor = tk.NW)
+        self.after(self.delay,self.update_positionpad)
 
 
 
