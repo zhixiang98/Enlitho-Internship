@@ -370,7 +370,7 @@ class Overview(tk.Frame):
     def convert_canvas_coord_to_pospad(self,numbers,xy):
         if xy == 1:
             scale = 130/310
-            magnitude = (numbers - 50)*scale # +2 to the limit
+            magnitude = (numbers - 50)*scale
             magnitude = magnitude - 65
 
 
