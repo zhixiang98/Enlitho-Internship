@@ -5,6 +5,10 @@ import tkinter as tk
 import cv2
 import PIL.Image,PIL.ImageTk
 import threading
+from tkinter import ttk
+from tkinter import filedialog
+import time
+import pandas as pd
 
 class Camera:
     def __init__(self):
@@ -71,18 +75,6 @@ class LinearStage:
         return self.pi_device.HasPosChanged(self.axis)
 
 
-    # def movNegLim(self):
-    #     self.pi_device.MNL(self.axis)
-
-    # def movPosLim(self):
-    #     self.pi_device.MPL(self.axis)
-
-
-    # def defHomePos(self):
-    #     self.pi_device.DFH(self.axis)
-
-    # def movHomePos(self):
-    #     self.pi_device.GOH(self.axis)
 
 
 class App(tk.Tk, LinearStage,Camera):
@@ -101,7 +93,7 @@ class App(tk.Tk, LinearStage,Camera):
             if exc == gcserror.COM_INVALID_ID__9:
                 self.y = None
                 print('LinearStage Y not connected!')
-        self.geometry("640x1000")
+        self.geometry("1050x1000")
         container = tk.Frame(self)
         container.grid()
 
@@ -173,7 +165,7 @@ class Overview(tk.Frame):
 
         ######### Velocity
         ## Current Velocity
-        self.currentvel = tk.StringVar()
+        self.currentvel = tk.StringVar()   # Variable test label displaying current velocity
         self.SetSlowVelVar = tk.DoubleVar()
         self.SetMediumVelVar = tk.DoubleVar()
         self.SetFastVelVar = tk.DoubleVar()
@@ -255,25 +247,295 @@ class Overview(tk.Frame):
         self.moverelposy = tk.Entry(self.labelbox2, width=10, textvariable=self.move_rel_posy_var).grid(row=3, column=1)
         self.movebutton1 = tk.Button(self.labelbox2, width=10, text="Confirm", command=lambda: self.set_rel_posx()).grid(row=4, column=1)
 
+        ##Position Pad##
+        self.eventx = 0        #self.eventxy is the mouse clicking position
+        self.eventy = 0
+
+        # positionpad label frame
+        self.labelframepositionpad = tk.LabelFrame(self, text="Position Pad")
+        self.labelframepositionpad.grid(row=1, column=11, sticky="NSEW")
+
+        self.CanvasPositionPad = tk.Canvas(self.labelframepositionpad, height=400, width=400, bd=None, bg='blue')
+        self.CanvasPositionPad.grid(row=0, column=0, columnspan=4)
+        self.CanvasPositionPad.bind("<Button-1>", self.onclick)
+
+        # target location
+        self.targetxvar = tk.StringVar()
+        self.targetyvar = tk.StringVar()
+        self.targetxlabel = tk.Label(self.labelframepositionpad, text="Target X Pos: ").grid(row=1, column=0)
+        self.targetylabel = tk.Label(self.labelframepositionpad, text="Target Y Pos: ").grid(row=1, column=2)
+        self.targetxval = tk.Label(self.labelframepositionpad, textvariable=self.targetxvar, bg="light blue").grid(
+            row=1, column=1)
+        self.targetyval = tk.Label(self.labelframepositionpad, textvariable=self.targetyvar, bg="light blue").grid(
+            row=1, column=3)
+
+    #-------------------------Treeview---------------------------------------
+        self.treeviewframe = tk.LabelFrame (self,text = "Treeview", padx = 10, pady= 10)
+        self.treeviewframe.grid(row = 2, column = 11, rowspan = 10)
+        self.treeview = ttk.Treeview(self.treeviewframe)
+        self.treeview['columns'] = ("Command","x_value","y_value","step")
+        self.treeview.column("#0", width=0, stretch="NO")
+        self.treeview.column("Command", anchor="w", width=120)
+        self.treeview.column("x_value", anchor="center", width=80)
+        self.treeview.column("y_value", anchor="center", width=80)
+        self.treeview.column("step", anchor="center", width=80)
+
+        self.treeview.heading("#0", text="", anchor="w")
+        self.treeview.heading("Command", text="Command", anchor="w")
+        self.treeview.heading("x_value", text="x_value", anchor="w")
+        self.treeview.heading("y_value", text="y_value", anchor="w")
+        self.treeview.heading("step", text="Step", anchor="center")
+
+        #tree binding
+        # self.treeview.bind("<ButtonRelease-1>", self.clickertree)
+
+        self.treeview.grid(row = 0, column  = 0, columnspan = 4)
+
+
+            #New Data entry
+        self.entrybutton = tk.Button(self.treeviewframe, text = "Insert" ,width = 10, command = lambda:self.newentry())
+        self.entrybutton.grid(row = 4, column = 0, pady = 5)
+
+            #Remove entry
+        self.removentrybutton = tk.Button(self.treeviewframe, text="Remove",width = 10, command=lambda: self.removentry())
+        self.removentrybutton.grid(row=4, column=1)
+
+            #moveup entry
+        self.moveupentrybutton = tk.Button(self.treeviewframe, text = "Move Up",width = 10, command = lambda: self.moveuptree())
+        self.moveupentrybutton.grid(row = 4, column =2)
+
+            #movedown entry
+        self.movedownbutton = tk.Button(self.treeviewframe, text = "Move Down",width = 10,  command = lambda: self.movedowntree())
+        self.movedownbutton.grid(row = 4, column =3)
+
+            # Import Excel file
+        self.filebutton = tk.Button(self.treeviewframe, text  = "Import",width = 10, command = lambda:self.fileopen())
+        self.filebutton.grid (row = 5, column  = 0)
+            #Clear all in treeview
+        self.clearallbutton = tk.Button(self.treeviewframe, text = "Clear All",width = 10, command = lambda:self.clearall())
+        self.clearallbutton.grid(row = 5, column = 1)
+            # Execute
+        self.executetree = tk.Button(self.treeviewframe,  text = "Execute", width = 24, command = lambda:self.executiontree())
+        self.executetree.grid(row = 5, column =2, columnspan = 2)
+
+            # Input new data field
+        self.commandlabel = tk.Label(self.treeviewframe,text = "Command")
+        self.commandlabel.grid(row = 1, column = 0)
+
+        self.treexlabel = tk.Label(self.treeviewframe, text = "x-value")
+        self.treexlabel.grid(row = 1, column = 1)
+
+        self.treeylabel = tk.Label(self.treeviewframe, text = "y-label")
+        self.treeylabel.grid(row = 1, column  = 2)
+
+        self.step = tk.Label(self.treeviewframe, text = "Step")
+        self.step.grid(row =1 , column = 3)
+
+        self.commandentry = tk.Entry(self.treeviewframe, width = 15)
+        self.commandentry.grid(row = 2,column = 0)
+
+        self.treexentryx = tk.Entry(self.treeviewframe, width = 15)
+        self.treexentryx.grid(row = 2, column =1)
+
+        self.treeyentry = tk.Entry(self.treeviewframe, width = 15)
+        self.treeyentry.grid(row=2, column=2)
+
+        self.stepentry = tk.Entry(self.treeviewframe, width = 15)
+        self.stepentry.grid(row=2, column=3)
+#--------------------------- End of treeview----------------------------
+
 
         self.update_canvas()
+        self.update_positionpad()
 
+
+
+    #----------Treeview function -----------#
+    def moveuptree(self):
+        rows = self.treeview.selection()
+        for row in rows:
+            self.treeview.move(row, self.treeview.parent(row), self.treeview.index(row) - 1)
+
+    def movedowntree(self):
+        rows = self.treeview.selection()
+        for row in reversed(rows):
+            self.treeview.move(row, self.treeview.parent(row), self.treeview.index(row) + 1)
+
+    def removentry(self):
+        rows = self.treeview.selection()
+        print(rows)
+        for row in rows:
+            self.treeview.delete(row)
+
+        # Open file function
+
+    def fileopen(self):
+        filename = filedialog.askopenfilename(initialdir="C:/documents", title="Open file",
+                                              filetype=(("xlsx files", "*.xlsx"), ("All Files", "*.*")))
+        if filename:
+            try:
+                file = r"{}".format(filename)
+                df = pd.read_excel(file)
+                df = df.fillna("")
+                df_rows = df.to_numpy().tolist()
+            except ValueError:
+                print("File could not be read")
+            except FileNotFoundError:
+                print("File could not be found")
+        for row in df_rows:
+            self.treeview.insert("", "end", values=row)
+        # clear all from treeview
+
+    def clearall(self):
+        self.treeview.delete(*self.treeview.get_children())
+
+        # add entry
+
+    def newentry(self):
+        if self.commandentry.get() == '' and self.treexentryx.get() == '' and self.treeyentry.get() == '' and self.stepentry.get() == '':
+            print('nothing!')
+            pass
+        else:
+            self.treeview.insert('', 'end', values=(
+            self.commandentry.get(), self.treexentryx.get(), self.treeyentry.get(), self.stepentry.get()))
+            self.commandentry.delete(0, 'end')
+            self.treexentryx.delete(0, 'end')
+            self.treeyentry.delete(0, 'end')
+            self.stepentry.delete(0, 'end')
+
+    def executiontree(self):
+        # print("selection: ")
+        # for items in self.treeview.selection():
+        #     item_text = self.treeview.item(items)
+        #     print(item_text)
+        #     itemlst = item_text.get('values')
+        #     print(type(itemlst[2]))
+        #     print(float(itemlst[2]))
+        self.executelist = []
+        for items in self.treeview.get_children():
+            item_text = self.treeview.item(items)
+            item_text = item_text.get('values')
+            self.executelist.append(item_text)
+
+        command = threading.Thread(target=self.executionfunction, args=(self.executelist,))
+        command.start()
+        # print(self.executelist)
+
+    def executionfunction(self, instructions):
+        for commands in instructions:
+            try:
+                valx = float(commands[1])
+            except:
+                print("x value invalid!")
+                break
+            try:
+                valy = float(commands[2])
+            except:
+                print("y value invalid!")
+                break
+
+            if commands[0] == "Move":
+                self.cont.x.movPos(valx)
+                self.cont.x.waitonTarget()
+                # self.cont.y.movPos(valy)
+                # self.cont.y.waitonTarget()
+                print("finish moving to absolute postions")
+
+            elif commands[0] == "MoveRelative":
+                self.cont.x.movRel(valx)
+                self.cont.x.waitonTarget()
+                # self.cont.y.moveRel(valy)
+                # self.cont.y.waitonTarget()
+                print("finish moving to relative positions")
+
+            elif commands[0] == "Step":
+                step = int(commands[3])
+                for iteration in range(step):
+                    self.cont.x.movRel(valx)
+                    self.cont.x.waitonTarget()
+                    print(str(iteration))
+            else:
+                pass
+
+    #---------- Postion Pad Click ----------#
+
+    def onclick(self,event):
+        if self.CanvasPositionPad.canvasx(event.x) <50 or self.CanvasPositionPad.canvasy(event.y) <48 or self.CanvasPositionPad.canvasx(event.x) >360 or self.CanvasPositionPad.canvasy(event.y)>356:
+            print("Out of coordinate frame!")
+        else:
+
+            self.eventx = self.CanvasPositionPad.canvasx(event.x)
+            self.eventy = self.CanvasPositionPad.canvasy(event.y)
+            self.pospadx = self.convert_canvas_coord_to_pospad(self.eventx,1)
+            self.pospady = self.convert_canvas_coord_to_pospad(self.eventy,2)
+            self.targetxvar.set(str(self.pospadx))
+            self.targetyvar.set(str(self.pospady))
+            try:
+                self.cont.x.movPos(self.pospadx)
+                self.cont.y.movPos(self.pospady)
+            except:
+                pass
+
+    def convert_canvas_coord_to_pospad(self,numbers,xy):                   #xy is axis
+        if xy == 1:
+            scale = 130/310
+            magnitude = (numbers - 50)*scale # +2 to the limit
+            magnitude = magnitude - 65
+
+
+        if xy == 2:
+            scale = 130/308
+            magnitude = (numbers - 48)*scale
+            magnitude = 65 - magnitude
+        return magnitude
+
+    def convert_pospad_to_canvas_coord(self):
+        xpos = float(self.xposvar.get()) + 65.0
+        ypos = float(self.yposvar.get()) + 65.0
+        xpos = xpos // 130 *310
+        ypos = ypos // 130 * 308
+        xpos = xpos + 50
+        ypos = ypos + 48
+        return xpos, ypos
+
+
+
+
+    def update_positionpad(self):
+        self.positionpadimg = cv2.imread('PositionPad.png')
+        self.positionpadimg = cv2.circle(self.positionpadimg,(int(self.eventx),int(self.eventy)),3,(255,0,0),1)
+        try:
+            X_POS, Y_POS = self.convert_pospad_to_canvas_coord()
+            self.positionpadimg = cv2.circle(self.positionpadimg, (int(X_POS), int(Y_POS)),3,(0,255,0),1)
+        except:
+            pass
+        self.positionpadimg= PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(self.positionpadimg))
+        self.CanvasPositionPad.create_image(2,2,image = self.positionpadimg,anchor = tk.NW)
+        self.after(self.delay,self.update_positionpad)
+
+    #------------Recticle CB---------------#
     def changerecCB(self):
         self.cont.recticlecb = self.recticleCBVar.get()
 
     def update_canvas(self):
 
-        self.cur_vel()
-
+        #---------get info of current velocity from Linear Stage------
+        try:
+            self.cur_vel()
+        except:
+            #print("Current Velocity info not available!")
+            pass
         #---------get info from LinearStage
         try:
             self.set_xposvar()
         except:
+            #print("Current X-pos value not available!")
             pass
 
         try:
             self.set_yposvar()
         except:
+            #print("Current Y-pos value not available!")
             pass
 
         #---------------Canvas update---------
@@ -290,14 +552,11 @@ class Overview(tk.Frame):
 
     #--------------------- LINEAR STAGE COMMAND-----------------
     def cur_vel(self):
-        try:
-            vel = self.cont.y.getVel()
-            flt= (vel.get(1))
-            self.currentvel.set(str(flt))
-        except:
-            print("Current Velocity not available!")
+        vel = self.cont.x.getVel()
+        flt= (vel.get(1))
+        self.currentvel.set(str(flt))
 
-            
+
     def set_rel_posx(self):
         pos_x = self.move_rel_posx_var.get()
         pos_y = self.move_rel_posy_var.get()
@@ -382,10 +641,10 @@ class Overview(tk.Frame):
             self.cont.y.movRel(val)
         if direction == 'LEFT':
             val = float(self.currentvel.get())* -1
-            self.cont.x.moveRel()
+            self.cont.x.movRel(val)
         if direction == 'RIGHT':
             val = float(self.currentvel.get())* 1
-            self.cont.x.moveRel(val)
+            self.cont.x.movRel(val)
 
 
 class Parameters(tk.Frame):
