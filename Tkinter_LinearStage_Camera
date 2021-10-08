@@ -94,6 +94,7 @@ class App(tk.Tk, LinearStage,Camera):
                 self.y = None
                 print('LinearStage Y not connected!')
         self.geometry("1050x1000")
+        self.title("Enlitho Laser Interface System")
         container = tk.Frame(self)
         container.grid()
 
