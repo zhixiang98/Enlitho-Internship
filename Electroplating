@@ -1,0 +1,184 @@
+from tkinter import Tk, Label, Button,ttk
+import tkinter as tk
+from rd6006 import RD6006
+
+
+
+appbg = "Black"
+labelbg = "DodgerBlue4"
+labelfg = "White"
+
+# class Power_Supply(RD6006):
+#     def __init__(self,COM):
+#         self.r = RD6006(port= COM)
+#
+#     def Get_Input_Voltage(self):
+#         return self.r.input_voltage
+
+
+
+class App(tk.Tk, RD6006):
+    def __init__(self, *args,**kwargs):
+        tk.Tk.__init__(self,*args,**kwargs)
+        try:
+            RD6006.__init__(self,'COM3')
+        except:
+            print("Error Initialising")
+        self.title("A simple GUI")
+        self.geometry("1024x600")
+        self.title("Enlitho Electoplating System")
+        self.configure(background= appbg)
+
+        container = tk.Frame(self)
+        container.grid()
+
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+
+        self.frames = {}
+
+        for F in (Overview, Parameters):
+            frame = F(container, self)
+            self.frames[F] = frame
+            frame.grid(row=0, column=0, sticky='nsew')
+
+
+        self.show_frame(Overview)
+
+    def show_frame(self,cont):
+        frame = self.frames[cont]
+        frame.tkraise()
+
+
+
+class Overview(tk.Frame):
+    def __init__(self, parent, cont):
+        tk.Frame.__init__(self, parent)
+        self.cont = cont
+
+        self.delay = 50
+
+        #---DC Power---
+        self.labelbox = tk.LabelFrame(self, labelwidget = tk.Label(text = "DC Power",  font = 20), padx=10, pady=10, height = 450, width = 200, bg= labelbg,fg = labelfg,relief = 'raised')
+        self.labelbox.grid(row=1, column=2, rowspan=2, sticky="NSEW")
+
+        # self.labelbox.grid(row=1, column=2, rowspan = 2,sticky="NSEW")
+        # self.labelbox.grid_propagate(0)
+        self.inputvoltagelabel = tk.Label(self.labelbox, text="Input Voltage: ",bg = labelbg,fg = labelfg,font = 20,pady = 10).grid(row=1, column=0, sticky = "W")
+
+        self.inputvoltagevalue = tk.StringVar
+        self.inputvoltagedisplay = tk.Label(self.labelbox, textvariable= self.inputvoltagevalue,font = 20,fg = labelbg).grid(row = 2, column =0,sticky = "NSEW")
+
+        self.outputvoltagelabel = tk.Label(self.labelbox, text="Output Voltage: ",bg = labelbg, fg = labelfg,font =20, pady = 10).grid(row=3, column=0, sticky = "W")
+        self.outputvoltagevalue = tk.StringVar
+        self.outputvoltagedisplay = tk.Label(self.labelbox, textvariable= self.outputvoltagevalue,font = 20,fg = labelbg).grid(row = 4, column =0,sticky = "NSEW")
+
+        self.outputcurrentlabel = tk.Label(self.labelbox, text="Output Current: ", bg=labelbg, fg=labelfg, font=20,
+                                           pady=10).grid(row=5, column=0, sticky="W")
+        self.outputcurrentvalue = tk.StringVar
+        self.outputcurrentdisplay = tk.Label(self.labelbox, textvariable=self.outputcurrentvalue, font=20,
+                                             fg=labelbg).grid(row=6, column=0, sticky="NSEW")
+
+        self.OVPlabel = tk.Label(self.labelbox, text="OVP: ", bg=labelbg, fg=labelfg, font=20, pady=10).grid(row= 7, column=0, sticky="W")
+        self.OVPvalue = tk.StringVar
+        self.OVPdisplay = tk.Label(self.labelbox, textvariable=self.OVPvalue, font=20, fg=labelbg).grid(row=8, column=0, sticky="NSEW")
+
+        self.OCPlabel = tk.Label(self.labelbox, text="OCP: ", bg=labelbg, fg=labelfg, font=20, pady = 10).grid(row = 9,column =0, sticky ="W")
+        self.OCPvalue = tk.StringVar
+        self.OCPdisplay = tk.Label(self.labelbox, textvariable=self.OCPvalue, font=20, fg=labelbg).grid(row=10, column=0, sticky="NSEW")
+
+        self.SystemTempLabel = tk.Label(self.labelbox, text="System Temperature: ", bg=labelbg, fg=labelfg, font=20, pady=10).grid(row=11,column=0,sticky="W")
+        self.SystemTempValue = tk.StringVar
+        self.SystemTempDisplay = tk.Label(self.labelbox, textvariable=self.SystemTempValue, font=20, fg=labelbg).grid(row=12,column=0,sticky="NSEW")
+
+        #---CV/CC---
+        self.labelbox1 = tk.LabelFrame(self, labelwidget = tk.Label(text = "Mode",  font = 500), padx=10, pady=10, height = 200, width = 200, bg= labelbg,fg = labelfg)
+        self.labelbox1.grid(row=3, column=2, sticky="NSEW")
+        self.labelbox1.grid_propagate(0)
+
+        #---V-Set---
+        self.labelbox2 = tk.LabelFrame(self, labelwidget=tk.Label(text="Settings", font=20), padx=10, pady=10, height=300,
+                                       width=150, bg=labelbg, fg=labelfg)
+        self.labelbox2.grid(row=1, column=3, sticky="NWSE")
+
+        tk.Label(self.labelbox2,text = "V-Set: ",font = "Veredana 20", bg = labelbg, fg = labelfg).grid(column = 0, row = 0)
+        self.V1 = ttk.Combobox(self.labelbox2,width = 1, values = [0,1,2,3,4,5,6,7,8,9], font = "Veredana 20 bold").grid(column = 2,row = 0)
+        self.V2 = ttk.Combobox(self.labelbox2,width = 1, values = [0,1,2,3,4,5,6,7,8,9], font = "Veredana 20 bold").grid(column = 3,row = 0)
+        tk.Label(self.labelbox2,text = ".", font = "Veredana 30 bold", bg = labelbg, fg = labelfg).grid(column = 4, row  = 0)
+        self.V3 = ttk.Combobox(self.labelbox2,width = 1, values = [0,1,2,3,4,5,6,7,8,9], font = "Veredana 20 bold").grid(column = 5,row = 0)
+
+        #---I-Set---
+        tk.Label(self.labelbox2, text="I-Set: ", font="Veredana 20", bg=labelbg, fg=labelfg).grid(column=0, row=1)
+        self.I1 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=2, row=1)
+        self.I2 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=3, row=1)
+        tk.Label(self.labelbox2, text=".", font="Veredana 30 bold", bg=labelbg, fg=labelfg).grid(column=4, row=1)
+        self.I3 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=5, row=1)
+
+        #---Temperature Set---
+        tk.Label(self.labelbox2, text="Temp-Set: ", font="Veredana 20", bg=labelbg, fg=labelfg).grid(column=0, row=2)
+        self.T1 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=2, row=2)
+        self.T2 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=3, row=2)
+        tk.Label(self.labelbox2, text=".", font="Veredana 30 bold", bg=labelbg, fg=labelfg).grid(column=4, row=2)
+        self.T3 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=5, row=2)
+        #---Timer---
+        tk.Label(self.labelbox2, text="Timer: ", font="Veredana 20", bg=labelbg, fg=labelfg).grid(column=0, row=3)
+        self.T1 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=2, row=3)
+        self.T2 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=3, row=3)
+        tk.Label(self.labelbox2, text=".", font="Veredana 30 bold", bg=labelbg, fg=labelfg).grid(column=4, row=3)
+        self.T3 = ttk.Combobox(self.labelbox2, width=1, values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                               font="Veredana 20 bold").grid(column=5, row=3)
+
+        #--- Numpad---
+        self.labelbox3 = tk.LabelFrame(self, labelwidget=tk.Label(text="Keypad", font=20), padx=10, height=500,
+                                       width=600, bg= appbg, fg=labelfg)
+        self.labelbox3.grid(row=2, column=3, sticky="NWE",rowspan =2)
+        numberpad = "789456123"
+        i = 0
+        self.btn = []
+        for j in range(2, 5):
+            for k in range(3):
+                self.btn.append(tk.Button(self.labelbox3, width=6, height=2,
+                                  bg='black', fg='white',
+                                  font=('Helvetica', 20, 'bold'),
+                                  bd=4, text=numberpad[i]))
+                self.btn[i].grid(row=j, column=k, pady=1)
+                i+=1
+
+        self.update_info()
+        #---Temperature
+
+     #----------Function---------------------
+    def update_info(self):
+        #---get info of input Voltage----
+        self.input_voltage_labelupdate()
+
+        try:
+            val = self.input_voltage_labelupdate()
+            self.inputvoltagevalue.set(val)
+        except:
+            print("ERROR")
+
+        self.after(self.delay,self.update_info)
+
+
+    def input_voltage_labelupdate(self):
+        # val = self.cont.voltage()
+        # return val
+        pass
+
+
+class Parameters(tk.Frame):
+    def __init__(self, parent, cont):
+        tk.Frame.__init__(self, parent)
+
+
+my_gui = App()
+my_gui.mainloop()
